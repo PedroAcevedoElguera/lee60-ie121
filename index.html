@@ -31,6 +31,9 @@ td,th{padding:.4rem .6rem;border-bottom:1px solid #dbe6f7;text-align:left;font-s
 <script>
 /* ===== CONFIGURACIÓN (editable) ===== */
 const CLAVE_DAIP = 'Fatima2026', USUARIO_DAIP = 'daip121';
+const TOTAL = 1200;    // duración total en segundos (20 min)
+const T_ANTES = 180;   // fase ANTES: 3 min
+const T_DESPUES = 180; // fase DESPUÉS: 3 min (DURANTE = el resto, 14 min)
 const VEL = 1; // 1 = tiempo real. Usa 60 para probar (1 s = 1 min)
 const P = 'lee60_ie121_';
 const URL_SHEETS = 'https://script.google.com/macros/s/AKfycbxPUozmiovw5SC0Y3eRM-yNJ5uJQRsTOjCup1G1gBBz7Jjwvi8d7cC1d_kgk02fidzv/exec'; // <-- pega aquí la URL /exec de tu Apps Script
@@ -110,9 +113,9 @@ function leerArchivo(f) { // PDF tal cual; imágenes se reducen a 1600 px JPEG p
 }
 
 /* ===== TIEMPO ===== */
-const el = r => r.t0 ? Math.min(3600, Math.floor((Date.now() - r.t0) * VEL / 1000)) : r.seg;
+const el = r => r.t0 ? Math.min(TOTAL, Math.floor((Date.now() - r.t0) * VEL / 1000)) : r.seg;
 const mmss = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-const faseDe = s => s < 600 ? 'antes' : s < 3000 ? 'durante' : 'despues';
+const faseDe = s => s < T_ANTES ? 'antes' : s < TOTAL - T_DESPUES ? 'durante' : 'despues';
 const racha = r => { let n = 0, d = new Date(); const set = new Set(r.dias); if (!set.has(d.toISOString().slice(0,10))) d.setDate(d.getDate() - 1); while (set.has(d.toISOString().slice(0,10))) { n++; d.setDate(d.getDate() - 1); } return n; };
 
 /* ===== MODAL ===== */
@@ -161,9 +164,9 @@ function vistaEst() {
    <div class="card md:col-span-2 text-center">
     <div class="text-sm">Hola, <b>${esc(r.n)}</b> · ${esc(r.g)} ${esc(r.s)}</div>
     <div id="fase" class="inline-block rounded-full px-4 py-1 text-sm font-bold mt-2"></div>
-    <div id="clk" class="text-7xl font-bold my-2">60:00</div>
+    <div id="clk" class="text-7xl font-bold my-2">20:00</div>
     <div class="h-3 bg-gray-200 rounded-full overflow-hidden flex"><div id="bar" class="h-full" style="width:0"></div></div>
-    <div class="flex justify-between text-[10px] mt-1"><span>Antes 10'</span><span>Durante 40'</span><span>Después 10'</span></div>
+    <div class="flex justify-between text-[10px] mt-1"><span>Antes 3'</span><span>Durante 14'</span><span>Después 3'</span></div>
     <div class="flex flex-wrap gap-2 justify-center mt-3">
      <button id="bI" class="btn" onclick="iniciar()">▶ Iniciar</button>
      <button id="bP" class="btn" onclick="pausar()" disabled>⏸ Pausar</button>
@@ -177,7 +180,7 @@ function vistaEst() {
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">${L.map(b => `
    <button onclick="abrir('${b.id}')" class="text-left rounded-xl overflow-hidden bg-white shadow hover:scale-[1.02] transition">
     <div class="h-24 flex items-center justify-center text-white text-3xl" style="background:${b.c}">📖</div>
-    <div class="p-2"><div class="text-xs font-bold leading-tight">${esc(b.t)}</div><div class="text-[10px] opacity-70">${esc(b.g)} · ${b.m} min</div></div></button>`).join('')}</div>`;
+    <div class="p-2"><div class="text-xs font-bold leading-tight">${esc(b.t)}</div><div class="text-[10px] opacity-70">${esc(b.g)} · ${TOTAL / 60} min</div></div></button>`).join('')}</div>`;
   clearInterval(tick); tick = setInterval(upd, 500); upd();
 }
 const COL = {antes: ['#fef08a', '#a16207'], durante: ['#bbf7d0', '#166534'], despues: ['#bfdbfe', '#1e40af']};
@@ -185,15 +188,15 @@ function upd() {
   if (!U || !$('#clk')) return;
   const r = U, s = el(r), f = faseDe(s), corriendo = !!r.t0;
   const ver = pausa !== null ? pausa : s;
-  $('#clk').textContent = mmss(3600 - ver);
-  $('#bar').style.width = (s / 36) + '%'; $('#bar').style.background = COL[f][1];
+  $('#clk').textContent = mmss(TOTAL - ver);
+  $('#bar').style.width = (s * 100 / TOTAL) + '%'; $('#bar').style.background = COL[f][1];
   $('#fase').textContent = {antes: 'FASE ANTES', durante: 'FASE DURANTE', despues: 'FASE DESPUÉS'}[f] + (pausa !== null ? ' · pausado (el tiempo sigue)' : '');
   $('#fase').style.cssText = `background:${COL[f][0]};color:${COL[f][1]}`;
   $('#bI').disabled = corriendo || r.est === 'Terminado'; $('#bP').disabled = !corriendo;
   $('#bP').textContent = pausa !== null ? '▶ Reanudar' : '⏸ Pausar';
-  $('#bF').disabled = !(corriendo && s >= 3600);
+  $('#bF').disabled = !(corriendo || (r.seg > 0 && r.est !== 'Terminado'));
   if (f !== lastFase) { lastFase = f; panel(f); }
-  if (corriendo && s >= 3600) { r.seg = 3600; save(); }
+  if (corriendo && s >= TOTAL) { r.seg = TOTAL; save(); }
 }
 function panel(f) {
   const r = U, a = r.antes || {}, b = L.find(x => x.id === r.libro);
@@ -202,7 +205,7 @@ function panel(f) {
    <textarea id="a0" rows="2" onchange="${sv2()}">${esc(a.pred || '')}</textarea><b class="block mt-2">3 palabras nuevas y su significado</b>
    ${[1, 2, 3].map(i => `<div class="grid grid-cols-2 gap-2 mt-1"><input id="w${i}" placeholder="Palabra ${i}" value="${esc(a['w' + i] || '')}" onchange="${sv2()}"><input id="m${i}" placeholder="Significado" value="${esc(a['m' + i] || '')}" onchange="${sv2()}"></div>`).join('')}</div>`
   : f === 'durante' ? `<div class="rounded-xl p-3" style="background:#dcfce7">📖 Lectura activa: ${b ? `<b>${esc(b.t)}</b> <button class="btn text-xs" onclick="abrir('${b.id}')">Abrir visor</button>` : 'elige un libro de la biblioteca.'}</div>`
-  : `<div class="rounded-xl p-3" style="background:#dbeafe">✍️ Cuando llegue a 00:00 pulsa <b>Finalizar y Guardar Evidencia</b> para escribir tu resumen, el quiz y tu audio.</div>`;
+  : `<div class="rounded-xl p-3" style="background:#dbeafe">✍️ Cuando termines de leer pulsa <b>Finalizar y Guardar Evidencia</b> para escribir tu resumen, el quiz y tu audio.</div>`;
 }
 function guardarAntes() { const g = id => ($('#' + id) || {}).value || ''; U.antes = {pred: g('a0'), w1: g('w1'), m1: g('m1'), w2: g('w2'), m2: g('m2'), w3: g('w3'), m3: g('m3')}; save(); }
 function iniciar() {
@@ -251,6 +254,8 @@ function resaltar(id) {
 /* ===== EVIDENCIA ===== */
 let audioTmp = '', mr = null, sr = null;
 function evidencia() {
+  if (U.t0) { U.seg = el(U); U.t0 = null; } // detiene el cronómetro con el tiempo real leído
+  pausa = null; save();
   const b = L.find(x => x.id === U.libro); audioTmp = '';
   modal(`<h2 class="font-bold text-lg mb-2">Evidencia de lectura</h2>
   <label class="text-sm font-semibold">Resumen</label><textarea id="rs" rows="4" placeholder="Cuenta con tus palabras lo que leíste"></textarea>
@@ -291,10 +296,10 @@ function guardarEv() {
   let pts = 0; const resp = [];
   b.q.forEach((q, i) => { const c = document.querySelector(`input[name=q${i}]:checked`); const ok = !!c && +c.value === q.c; if (ok) pts++;
     resp.push({p: q.p, r: c ? q.o[+c.value] : '(sin responder)', ok}); });
-  Object.assign(U, {res, emo: window._emo, pts, audio: audioTmp, est: 'Terminado', t0: null, seg: 3600, fecha: hoy()});
+  Object.assign(U, {res, emo: window._emo, pts, audio: audioTmp, est: 'Terminado', t0: null, fecha: hoy()});
   if (!U.dias.includes(hoy())) U.dias.push(hoy());
   if (!U.leidos.includes(b.id)) U.leidos.push(b.id);
-  U.xp += 600; pausa = null; save(); enviar('evidencia', {dni: U.dni, n: U.n, g: U.g, s: U.s, libro: b.t, min: 60, res, emo: window._emo, pts, xp: U.xp, resp}); cerrar(); alert(`¡Evidencia guardada! Quiz: ${pts}/${b.q.length} · +600 XP`); vistaEst();
+  const ganado = Math.floor(U.seg / 60) * 10; U.xp += ganado; pausa = null; save(); enviar('evidencia', {dni: U.dni, n: U.n, g: U.g, s: U.s, libro: b.t, min: Math.round(U.seg / 60), res, emo: window._emo, pts, xp: U.xp, resp}); cerrar(); alert(`¡Evidencia guardada! Quiz: ${pts}/${b.q.length} · +${ganado} XP`); vistaEst();
 }
 
 /* ===== PANEL ADMIN ===== */
