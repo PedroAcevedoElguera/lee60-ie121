@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0A2A5E">
+<title>LEE 60 - IE 121 Virgen de Fátima</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{font-family:Poppins,system-ui,sans-serif;background:#eef5ff;color:#0A2A5E;min-height:100vh;display:flex;flex-direction:column}
+.btn{background:#0A2A5E;color:#fff;border-radius:.75rem;padding:.5rem 1rem;font-weight:600}.btn:hover{background:#3AA0FF}
+.btn:disabled{opacity:.4;cursor:not-allowed}.card{background:#fff;border-radius:1rem;box-shadow:0 2px 10px #0a2a5e22;padding:1rem}
+input,select,textarea{border:1px solid #b6c9e8;border-radius:.6rem;padding:.45rem .7rem;width:100%;background:#fff;color:#0A2A5E}
+mark{background:#fde047}.night{background:#111827!important;color:#e5e7eb!important}.night mark{color:#111}
+td,th{padding:.4rem .6rem;border-bottom:1px solid #dbe6f7;text-align:left;font-size:.8rem}
+</style></head>
+<body>
+<header class="bg-[#0A2A5E] text-white p-3 flex items-center justify-between">
+ <div class="flex items-center gap-3"><div class="bg-[#3AA0FF] rounded-xl px-3 py-2 font-bold text-sm">IE 121 VF</div>
+ <div><div class="font-bold leading-tight">LEE 60</div><div class="text-xs opacity-80">IE 121 Virgen de Fátima · 1 Hora de Lectura Diaria</div></div></div>
+ <button id="out" class="hidden btn !bg-[#3AA0FF] text-sm" onclick="salir()">Salir</button>
+</header>
+<main id="app" class="flex-1 p-4 max-w-6xl w-full mx-auto"></main>
+<footer class="text-center text-[11px] text-gray-500 p-3">
+ © 2026 EdTech - Ingeniería Educativa · Prof. Pedro Acevedo Elguera | IE 121 Virgen de Fátima - Rímac<br>
+ <button class="underline text-[10px] mt-1" onclick="loginAdmin()">Acceso DAIP</button>
+</footer>
+<div id="modal" class="hidden fixed inset-0 bg-black/60 z-50 overflow-auto p-3"></div>
+
+<script>
+/* ===== CONFIGURACIÓN (editable) ===== */
+const CLAVE_DAIP = 'Fatima2026', USUARIO_DAIP = 'daip121';
+const VEL = 1; // 1 = tiempo real. Usa 60 para probar (1 s = 1 min)
+const P = 'lee60_ie121_';
+const URL_SHEETS = ''; // <-- pega aquí la URL /exec de tu Apps Script
+const TOKEN_SHEETS = 'CAMBIA_ESTE_TOKEN'; // <-- igual que TOKEN en Code.gs
+
+/* ===== UTILIDADES ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ld = (k, d) => { try { const v = localStorage.getItem(P + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+const sv = (k, v) => { try { localStorage.setItem(P + k, JSON.stringify(v)); } catch (e) { alert('Almacenamiento lleno: exporta un backup y borra audios.'); } };
+const hoy = () => new Date().toISOString().slice(0, 10);
+const GRADOS = ['1° Prim','2° Prim','3° Prim','4° Prim','5° Prim','6° Prim','1° Sec','2° Sec','3° Sec','4° Sec','5° Sec'];
+const EMOS = ['😄','🙂','😐','😟','😢'];
+
+/* ===== DATOS ===== */
+const PARR = 'Había una vez en el Rímac una escuela donde los niños leían cada mañana junto al río. Cada página abría una puerta distinta: veían montañas, selvas y ciudades lejanas. La maestra les enseñaba que leer es viajar sin moverse, y que cada palabra nueva es un tesoro que se guarda en la memoria para siempre.';
+const mkQ = t => [
+ {p:'¿Cómo se titula la lectura?', o:[t,'Otro libro','Ninguno'], c:0},
+ {p:'¿Dónde ocurre la escena de ejemplo?', o:['En el Rímac','En la Luna','En el mar'], c:0},
+ {p:'Según el texto, ¿qué es leer?', o:['Viajar sin moverse','Dormir','Correr'], c:0}];
+const TIT = [['El Caballero Carmelo','3° Prim','#b45309'],['Paco Yunque','4° Prim','#0369a1'],['Tradiciones Peruanas - El Alacrán de Fray Gómez','3° Sec','#7c3aed'],['Mitos de la Virgen de Fátima','1° Sec','#0A2A5E'],['Cuentos de la Selva','2° Prim','#15803d'],['Valores Fatiminos','1° Prim','#3AA0FF'],['Fábulas de Primaria','2° Prim','#be123c'],['Historia del Rímac','5° Prim','#92400e'],['La Ciudad y los Perros (fragmento)','5° Sec','#334155'],['Ciencia para niños','6° Prim','#0f766e'],['Quechua - Ollantay','4° Sec','#a16207'],['El Principito','6° Prim','#1d4ed8']];
+const LIBROS0 = TIT.map((x, i) => ({id: 'b' + (i + 1), t: x[0], g: x[1], m: 40, c: x[2], txt: Array(8).fill(PARR).join('\n\n'), q: mkQ(x[0])}));
+const nuevo = (dni, n, g, s) => ({dni, n, g, s, libro: null, t0: null, seg: 0, est: 'Sin iniciar', fecha: '', res: '', emo: '', pts: 0, audio: '', hl: {}, xp: 0, dias: [], leidos: [], antes: {}});
+const DEMO = [['72145890','Quispe Mamani, Lucía','3° Prim','A'],['70231456','Ramos Torres, Diego','5° Prim','B'],['71889023','Huamán Flores, Valeria','2° Sec','A'],['73012567','Ccori Vargas, Mateo','4° Sec','C'],['72456781','Salazar Rojas, Camila','6° Prim','D']].map(d => nuevo(...d));
+let S = ld('est', null) || DEMO, L = ld('libros', null) || LIBROS0, U = null, ADM = false, ADMKEY = '', EDIT = null, tick = null, pausa = null, lastFase = '';
+const save = () => { sv('est', S); sv('libros', L); };
+if (!ld('est', null)) save();
+
+/* ===== SINCRONIZACIÓN CON GOOGLE SHEETS (cola offline) ===== */
+let sync = false;
+const cola = () => ld('cola', []);
+function enviar(tipo, d) {
+  const c = cola(); c.push({id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), tipo, ts: new Date().toISOString(), ...d});
+  sv('cola', c); vaciar();
+}
+async function vaciar() {
+  if (!URL_SHEETS || sync || !navigator.onLine) return; sync = true;
+  try {
+    while (cola().length) {
+      const r = await fetch(URL_SHEETS, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({token: TOKEN_SHEETS, ev: cola()[0]})});
+      const j = await r.json(); if (!j.ok) break;
+      sv('cola', cola().slice(1)); // se elimina solo si Sheets confirmó
+    }
+  } catch (e) {}
+  sync = false;
+}
+addEventListener('online', vaciar); setInterval(vaciar, 30000);
+
+/* ===== BIBLIOTECA EN LA NUBE (Google Drive vía Apps Script) ===== */
+async function post(o) {
+  const r = await fetch(URL_SHEETS, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify(o)});
+  return r.json();
+}
+async function cargarNube(force) { // descarga la lista de lecturas desde Drive (con tiempo límite)
+  if (!URL_SHEETS || !navigator.onLine) return;
+  try {
+    const r = await fetch(URL_SHEETS + '?action=libros', {signal: AbortSignal.timeout(6000)}); const j = await r.json();
+    if (j.ok && (j.libros.length || force)) { L = j.libros; sv('libros', L); }
+  } catch (e) {}
+}
+function leerArchivo(f) { // PDF tal cual; imágenes se reducen a 1600 px JPEG para aligerar
+  return new Promise((ok, no) => {
+    if (!/^(application\/pdf|image\/(png|jpeg))$/.test(f.type)) return no('Solo PDF, PNG o JPG.');
+    if (f.size > 10 * 1024 * 1024) return no('El archivo supera 10 MB.');
+    const fr = new FileReader();
+    fr.onerror = () => no('No se pudo leer el archivo.');
+    fr.onload = () => {
+      if (f.type === 'application/pdf') return ok({nombre: f.name, mime: f.type, b64: fr.result.split(',')[1]});
+      const im = new Image(); im.onerror = () => no('Imagen inválida.');
+      im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        ok({nombre: f.name.replace(/\.\w+$/, '') + '.jpg', mime: 'image/jpeg', b64: c.toDataURL('image/jpeg', .82).split(',')[1]}); };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(f);
+  });
+}
+
+/* ===== TIEMPO ===== */
+const el = r => r.t0 ? Math.min(3600, Math.floor((Date.now() - r.t0) * VEL / 1000)) : r.seg;
+const mmss = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+const faseDe = s => s < 600 ? 'antes' : s < 3000 ? 'durante' : 'despues';
+const racha = r => { let n = 0, d = new Date(); const set = new Set(r.dias); if (!set.has(d.toISOString().slice(0,10))) d.setDate(d.getDate() - 1); while (set.has(d.toISOString().slice(0,10))) { n++; d.setDate(d.getDate() - 1); } return n; };
+
+/* ===== MODAL ===== */
+const modal = h => { $('#modal').innerHTML = '<div class="bg-white rounded-2xl max-w-2xl mx-auto my-4 p-4">' + h + '</div>'; $('#modal').classList.remove('hidden'); };
+const cerrar = () => { $('#modal').classList.add('hidden'); $('#modal').innerHTML = ''; };
+
+/* ===== LOGIN ===== */
+function vistaLogin() {
+  clearInterval(tick); U = null; ADM = false; $('#out').classList.add('hidden');
+  $('#app').innerHTML = `<div class="card max-w-md mx-auto mt-6 space-y-3">
+  <h1 class="text-xl font-bold text-center">¡Bienvenido a leer! 📚</h1>
+  <input id="ln" placeholder="Nombres y Apellidos">
+  <input id="ld" placeholder="DNI / Código (6-8 dígitos)" inputmode="numeric" maxlength="8">
+  <div class="grid grid-cols-2 gap-2"><select id="lg">${GRADOS.map(g => `<option>${g}</option>`).join('')}</select>
+  <select id="ls">${'ABCD'.split('').map(s => `<option>${s}</option>`).join('')}</select></div>
+  <button class="btn w-full" onclick="loginEst()">Ingresar a Leer</button></div>`;
+}
+async function loginEst() {
+  const n = $('#ln').value.trim(), d = $('#ld').value.trim();
+  if (!n) return alert('Escribe tus nombres y apellidos.');
+  if (!/^\d{6,8}$/.test(d)) return alert('El DNI/Código debe tener de 6 a 8 dígitos.');
+  let r = S.find(x => x.dni === d);
+  if (!r) { r = nuevo(d, n, $('#lg').value, $('#ls').value); S.push(r); }
+  else { r.n = n; r.g = $('#lg').value; r.s = $('#ls').value; }
+  U = r; save(); enviar('login', {dni: r.dni, n: r.n, g: r.g, s: r.s}); await cargarNube(); vistaEst();
+}
+async function loginAdmin() {
+  const u = prompt('Usuario DAIP:'); if (u === null) return;
+  const c = prompt('Clave:'); if (c === null) return;
+  let ok = false;
+  if (URL_SHEETS) { // con la nube configurada, la clave se valida en el servidor (CLAVE_ADMIN de Code.gs)
+    try { const j = await post({accion: 'admin', op: 'auth', clave: c}); ok = j.ok && u === USUARIO_DAIP; }
+    catch (e) { return alert('Sin conexión con el servidor. Intenta de nuevo.'); }
+  } else ok = (u === USUARIO_DAIP && c === CLAVE_DAIP); // modo local de pruebas
+  if (ok) { ADM = true; ADMKEY = c; vistaAdm('resumen'); } else alert('Credenciales incorrectas.');
+}
+function salir() { if (U && U.t0 && !confirm('Tu cronómetro sigue corriendo. ¿Salir?')) return; vistaLogin(); }
+
+/* ===== VISTA ESTUDIANTE ===== */
+function vistaEst() {
+  $('#out').classList.remove('hidden'); lastFase = '';
+  const r = U, rc = racha(r), xp = r.xp;
+  const med = [['🏃 Chasqui Lector', rc >= 5, '5 días seguidos'], ['📜 Amauta Fatimino', r.leidos.length >= 10, '10 libros'], ['⛪ Virgen de Fátima Lectora', rc >= 30, '30 días seguidos']];
+  $('#app').innerHTML = `
+  <div class="grid md:grid-cols-3 gap-4">
+   <div class="card md:col-span-2 text-center">
+    <div class="text-sm">Hola, <b>${esc(r.n)}</b> · ${esc(r.g)} ${esc(r.s)}</div>
+    <div id="fase" class="inline-block rounded-full px-4 py-1 text-sm font-bold mt-2"></div>
+    <div id="clk" class="text-7xl font-bold my-2">60:00</div>
+    <div class="h-3 bg-gray-200 rounded-full overflow-hidden flex"><div id="bar" class="h-full" style="width:0"></div></div>
+    <div class="flex justify-between text-[10px] mt-1"><span>Antes 10'</span><span>Durante 40'</span><span>Después 10'</span></div>
+    <div class="flex flex-wrap gap-2 justify-center mt-3">
+     <button id="bI" class="btn" onclick="iniciar()">▶ Iniciar</button>
+     <button id="bP" class="btn" onclick="pausar()" disabled>⏸ Pausar</button>
+     <button id="bF" class="btn !bg-green-600" onclick="evidencia()" disabled>Finalizar y Guardar Evidencia</button></div>
+    <div id="panel" class="mt-4 text-left"></div></div>
+   <div class="card"><h2 class="font-bold mb-2">🏆 Mi progreso</h2>
+    <div>⭐ XP: <b>${xp}</b></div><div>🔥 Racha: <b>${rc}</b> día(s)</div><div>📚 Libros: <b>${r.leidos.length}</b></div>
+    <div class="mt-2 space-y-1">${med.map(m => `<div class="text-sm ${m[1] ? '' : 'opacity-40'}">${m[1] ? '✅' : '🔒'} ${m[0]} <span class="text-[10px]">(${m[2]})</span></div>`).join('')}</div></div>
+  </div>
+  <h2 class="font-bold mt-5 mb-2">Biblioteca</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">${L.map(b => `
+   <button onclick="abrir('${b.id}')" class="text-left rounded-xl overflow-hidden bg-white shadow hover:scale-[1.02] transition">
+    <div class="h-24 flex items-center justify-center text-white text-3xl" style="background:${b.c}">📖</div>
+    <div class="p-2"><div class="text-xs font-bold leading-tight">${esc(b.t)}</div><div class="text-[10px] opacity-70">${esc(b.g)} · ${b.m} min</div></div></button>`).join('')}</div>`;
+  clearInterval(tick); tick = setInterval(upd, 500); upd();
+}
+const COL = {antes: ['#fef08a', '#a16207'], durante: ['#bbf7d0', '#166534'], despues: ['#bfdbfe', '#1e40af']};
+function upd() {
+  if (!U || !$('#clk')) return;
+  const r = U, s = el(r), f = faseDe(s), corriendo = !!r.t0;
+  const ver = pausa !== null ? pausa : s;
+  $('#clk').textContent = mmss(3600 - ver);
+  $('#bar').style.width = (s / 36) + '%'; $('#bar').style.background = COL[f][1];
+  $('#fase').textContent = {antes: 'FASE ANTES', durante: 'FASE DURANTE', despues: 'FASE DESPUÉS'}[f] + (pausa !== null ? ' · pausado (el tiempo sigue)' : '');
+  $('#fase').style.cssText = `background:${COL[f][0]};color:${COL[f][1]}`;
+  $('#bI').disabled = corriendo || r.est === 'Terminado'; $('#bP').disabled = !corriendo;
+  $('#bP').textContent = pausa !== null ? '▶ Reanudar' : '⏸ Pausar';
+  $('#bF').disabled = !(corriendo && s >= 3600);
+  if (f !== lastFase) { lastFase = f; panel(f); }
+  if (corriendo && s >= 3600) { r.seg = 3600; save(); }
+}
+function panel(f) {
+  const r = U, a = r.antes || {}, b = L.find(x => x.id === r.libro);
+  const sv2 = () => 'guardarAntes()';
+  $('#panel').innerHTML = f === 'antes' ? `<div class="rounded-xl p-3" style="background:#fef9c3"><b>¿De qué crees que tratará?</b>
+   <textarea id="a0" rows="2" onchange="${sv2()}">${esc(a.pred || '')}</textarea><b class="block mt-2">3 palabras nuevas y su significado</b>
+   ${[1, 2, 3].map(i => `<div class="grid grid-cols-2 gap-2 mt-1"><input id="w${i}" placeholder="Palabra ${i}" value="${esc(a['w' + i] || '')}" onchange="${sv2()}"><input id="m${i}" placeholder="Significado" value="${esc(a['m' + i] || '')}" onchange="${sv2()}"></div>`).join('')}</div>`
+  : f === 'durante' ? `<div class="rounded-xl p-3" style="background:#dcfce7">📖 Lectura activa: ${b ? `<b>${esc(b.t)}</b> <button class="btn text-xs" onclick="abrir('${b.id}')">Abrir visor</button>` : 'elige un libro de la biblioteca.'}</div>`
+  : `<div class="rounded-xl p-3" style="background:#dbeafe">✍️ Cuando llegue a 00:00 pulsa <b>Finalizar y Guardar Evidencia</b> para escribir tu resumen, el quiz y tu audio.</div>`;
+}
+function guardarAntes() { const g = id => ($('#' + id) || {}).value || ''; U.antes = {pred: g('a0'), w1: g('w1'), m1: g('m1'), w2: g('w2'), m2: g('m2'), w3: g('w3'), m3: g('m3')}; save(); }
+function iniciar() {
+  if (!U.libro) return alert('Primero elige un libro de la biblioteca.');
+  U.t0 = Date.now() - U.seg * 1000 / VEL; U.est = 'Leyendo'; U.fecha = hoy(); save(); enviar('inicio', {dni: U.dni, n: U.n, g: U.g, s: U.s, libro: (L.find(x => x.id === U.libro) || {}).t}); upd();
+}
+function pausar() { pausa = pausa === null ? el(U) : null; upd(); }
+
+/* ===== VISOR (texto, PDF o imagen) ===== */
+let fs = 18; const blobs = {};
+async function urlArchivo(a) { // baja el archivo desde Drive y lo muestra como blob local
+  if (blobs[a.id]) return blobs[a.id];
+  const r = await fetch(URL_SHEETS + '?action=archivo&id=' + encodeURIComponent(a.id)); const j = await r.json(); if (!j.ok) throw 0;
+  const bin = atob(j.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return blobs[a.id] = URL.createObjectURL(new Blob([u8], {type: j.mime}));
+}
+function abrir(id) {
+  const b = L.find(x => x.id === id); if (!b) return;
+  U.libro = id; save(); fs = 18;
+  modal(`<div class="flex flex-wrap gap-2 items-center mb-2"><b class="flex-1">${esc(b.t)}</b>
+   <button class="btn text-xs" onclick="fz(2)">A+</button><button class="btn text-xs" onclick="fz(-2)">A-</button>
+   <button class="btn text-xs" onclick="$('#txt').classList.toggle('night')">🌙 Noche</button>
+   <button class="btn text-xs !bg-yellow-400 !text-black" onclick="resaltar('${id}')">🖍 Resaltar selección</button>
+   <button class="btn text-xs" onclick="cerrar();vistaEst()">Cerrar</button></div>
+   <div id="txt" class="rounded-xl p-4 leading-relaxed" style="font-size:${fs}px;max-height:60vh;overflow:auto"></div><div id="arch" class="mt-3"></div>`);
+  pintar(b);
+  if (b.archivo) {
+    $('#arch').textContent = 'Cargando archivo…';
+    urlArchivo(b.archivo).then(u => { $('#arch').innerHTML = b.archivo.mime.startsWith('image/')
+      ? `<img src="${u}" class="max-w-full mx-auto rounded-lg">`
+      : `<iframe src="${u}" class="w-full rounded-lg" style="height:70vh"></iframe><a class="underline text-sm" href="${u}" target="_blank">Abrir PDF en otra pestaña</a>`; })
+      .catch(() => { $('#arch').textContent = 'No se pudo cargar el archivo (¿sin internet?).'; });
+  }
+}
+const fz = d => { fs = Math.max(12, Math.min(40, fs + d)); $('#txt').style.fontSize = fs + 'px'; };
+function pintar(b) {
+  if (!b.txt) { $('#txt').style.display = 'none'; return; }
+  let h = esc(b.txt); (U.hl[b.id] || []).forEach(s => { h = h.split(esc(s)).join('<mark>' + esc(s) + '</mark>'); });
+  $('#txt').innerHTML = h.replace(/\n/g, '<br>');
+}
+function resaltar(id) {
+  const t = String(getSelection()).trim(); if (t.length < 3) return alert('Selecciona un texto para resaltarlo.');
+  (U.hl[id] = U.hl[id] || []).push(t); save(); pintar(L.find(x => x.id === id));
+}
+
+/* ===== EVIDENCIA ===== */
+let audioTmp = '', mr = null, sr = null;
+function evidencia() {
+  const b = L.find(x => x.id === U.libro); audioTmp = '';
+  modal(`<h2 class="font-bold text-lg mb-2">Evidencia de lectura</h2>
+  <label class="text-sm font-semibold">Resumen</label><textarea id="rs" rows="4" placeholder="Cuenta con tus palabras lo que leíste"></textarea>
+  <button class="btn text-xs mt-1" onclick="dictar()">🎤 Dictar por Voz</button>
+  <div class="mt-3 text-sm font-semibold">¿Cómo te sentiste?</div>
+  <div class="flex gap-2 text-3xl" id="em">${EMOS.map(e => `<button onclick="emo('${e}')" class="rounded-full px-1 opacity-50">${e}</button>`).join('')}</div>
+  <div class="mt-3 text-sm font-semibold">Quiz</div>
+  ${b.q.map((q, i) => { const o = q.o.map((x, j) => [x, j]).sort(() => Math.random() - .5);
+    return `<div class="mt-2 text-sm">${i + 1}. ${esc(q.p)}${o.map(x => `<label class="block"><input type="radio" name="q${i}" value="${x[1]}" class="!w-auto mr-2">${esc(x[0])}</label>`).join('')}</div>`; }).join('')}
+  <div class="mt-3"><button id="ga" class="btn text-xs" onclick="grabar()">⏺ Grabar audio de lectura (máx. 30 s)</button> <span id="gs" class="text-xs"></span></div>
+  <div class="mt-4 flex gap-2"><button class="btn !bg-green-600" onclick="guardarEv()">Guardar</button><button class="btn !bg-gray-500" onclick="cerrar()">Cancelar</button></div>`);
+  window._emo = '';
+}
+function emo(e) { window._emo = e; [...$('#em').children].forEach(b => b.style.opacity = b.textContent === e ? 1 : .4); }
+function dictar() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return alert('Tu navegador no soporta dictado. Usa Chrome.');
+  sr = new SR(); sr.lang = 'es-PE';
+  sr.onresult = e => { $('#rs').value += (($('#rs').value ? ' ' : '') + e.results[0][0].transcript); };
+  sr.onerror = () => alert('No se pudo dictar (¿permiso de micrófono o sin internet?).'); sr.start();
+}
+async function grabar() {
+  if (mr && mr.state === 'recording') { mr.stop(); return; }
+  if (!window.MediaRecorder || !navigator.mediaDevices) return alert('Tu navegador no permite grabar audio.');
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({audio: true}), ch = [];
+    mr = new MediaRecorder(st); mr.ondataavailable = e => ch.push(e.data);
+    mr.onstop = () => { st.getTracks().forEach(t => t.stop());
+      const fr = new FileReader(); fr.onload = () => { audioTmp = fr.result; $('#gs').textContent = '✅ Audio listo'; $('#ga').textContent = '⏺ Grabar de nuevo'; }; fr.readAsDataURL(new Blob(ch, {type: mr.mimeType})); };
+    mr.start(); $('#ga').textContent = '⏹ Detener'; $('#gs').textContent = 'Grabando…';
+    setTimeout(() => { if (mr.state === 'recording') mr.stop(); }, 30000);
+  } catch (e) { alert('Sin permiso de micrófono.'); }
+}
+function guardarEv() {
+  const res = $('#rs').value.trim(), b = L.find(x => x.id === U.libro);
+  if (res.length < 10) return alert('Escribe un resumen (mínimo 10 caracteres).');
+  if (!window._emo) return alert('Elige una emoción.');
+  let pts = 0; const resp = [];
+  b.q.forEach((q, i) => { const c = document.querySelector(`input[name=q${i}]:checked`); const ok = !!c && +c.value === q.c; if (ok) pts++;
+    resp.push({p: q.p, r: c ? q.o[+c.value] : '(sin responder)', ok}); });
+  Object.assign(U, {res, emo: window._emo, pts, audio: audioTmp, est: 'Terminado', t0: null, seg: 3600, fecha: hoy()});
+  if (!U.dias.includes(hoy())) U.dias.push(hoy());
+  if (!U.leidos.includes(b.id)) U.leidos.push(b.id);
+  U.xp += 600; pausa = null; save(); enviar('evidencia', {dni: U.dni, n: U.n, g: U.g, s: U.s, libro: b.t, min: 60, res, emo: window._emo, pts, xp: U.xp, resp}); cerrar(); alert(`¡Evidencia guardada! Quiz: ${pts}/${b.q.length} · +600 XP`); vistaEst();
+}
+
+/* ===== PANEL ADMIN ===== */
+function vistaAdm(tab) {
+  clearInterval(tick); $('#out').classList.remove('hidden');
+  const T = [['resumen', 'Resumen'], ['est', 'Estudiantes'], ['bib', 'Biblioteca'], ['rep', 'Reportes MINEDU'], ['sis', 'Sistema']];
+  $('#app').innerHTML = `<div class="flex flex-wrap gap-2 mb-3">${T.map(t => `<button class="btn text-sm ${t[0] === tab ? '!bg-[#3AA0FF]' : ''}" onclick="vistaAdm('${t[0]}')">${t[1]}</button>`).join('')}</div><div class="card overflow-auto" id="ab"></div>`;
+  ({resumen: aRes, est: aEst, bib: aBib, rep: aRep, sis: aSis})[tab]();
+}
+function aRes() {
+  const h = S.filter(r => r.fecha === hoy() || r.t0), seg = S.reduce((a, r) => a + (r.fecha === hoy() || r.t0 ? el(r) : 0), 0), ok = S.filter(r => r.est === 'Terminado' && r.fecha === hoy()).length;
+  $('#ab').innerHTML = `<div class="grid sm:grid-cols-3 gap-3 text-center">
+   <div class="rounded-xl bg-blue-50 p-4"><div class="text-3xl font-bold">${h.length}</div>Estudiantes hoy</div>
+   <div class="rounded-xl bg-blue-50 p-4"><div class="text-3xl font-bold">${(seg / 3600).toFixed(1)} h</div>Horas acumuladas IE 121</div>
+   <div class="rounded-xl bg-blue-50 p-4"><div class="text-3xl font-bold">${S.length ? Math.round(ok * 100 / S.length) : 0}%</div>Cumplimiento (${ok}/${S.length})</div></div>`;
+}
+function aEst() {
+  $('#ab').innerHTML = `<table class="w-full"><tr><th>DNI</th><th>Nombre</th><th>Grado</th><th>Sec.</th><th>Libro</th><th>Min</th><th>Estado</th><th>Acciones</th></tr>
+  ${S.map((r, i) => { const b = L.find(x => x.id === r.libro); return `<tr><td>${esc(r.dni)}</td><td>${esc(r.n)}</td><td>${esc(r.g)}</td><td>${esc(r.s)}</td><td>${esc(b ? b.t : '-')}</td><td>${Math.floor(el(r) / 60)}</td><td>${r.t0 ? 'Leyendo' : esc(r.est)}</td>
+  <td class="whitespace-nowrap"><button class="underline" onclick="verEv(${i})">Evidencia</button> · <button class="underline" onclick="resetT(${i})">Reset</button> · <button class="underline text-red-600" onclick="delEst(${i})">Eliminar</button></td></tr>`; }).join('')}</table>`;
+}
+function verEv(i) {
+  const r = S[i], b = L.find(x => x.id === r.libro);
+  modal(`<h2 class="font-bold">${esc(r.n)}</h2><p class="text-sm">Libro: ${esc(b ? b.t : '-')} · Emoción: ${esc(r.emo || '-')} · Quiz: ${r.pts}/3</p>
+  <p class="text-sm mt-2"><b>Antes:</b> ${esc((r.antes || {}).pred || '-')}</p><p class="text-sm mt-2"><b>Resumen:</b> ${esc(r.res || '(sin evidencia)')}</p>
+  ${r.audio ? `<audio controls class="mt-2 w-full" src="${r.audio}"></audio>` : ''}<button class="btn mt-3" onclick="cerrar()">Cerrar</button>`);
+}
+function resetT(i) { if (!confirm('¿Resetear timer y evidencia de hoy?')) return; Object.assign(S[i], {t0: null, seg: 0, est: 'Sin iniciar', res: '', emo: '', pts: 0, audio: ''}); save(); aEst(); }
+function delEst(i) { if (!confirm('¿Eliminar este registro?')) return; S.splice(i, 1); save(); aEst(); }
+function aBib() {
+  const b = EDIT ? L.find(x => x.id === EDIT) : null, q = b ? b.q : [{}, {}, {}];
+  const ord = z => z.o ? [z.o[z.c], ...z.o.filter((_, k) => k !== z.c)] : [];
+  $('#ab').innerHTML = `<h2 class="font-bold mb-2">${b ? 'Editar' : 'Agregar'} lectura</h2><div class="grid sm:grid-cols-3 gap-2">
+  <input id="nt" class="sm:col-span-2" placeholder="Título" value="${esc(b ? b.t : '')}"><select id="ng">${GRADOS.map(g => `<option ${b && b.g === g ? 'selected' : ''}>${g}</option>`).join('')}</select></div>
+  <textarea id="nx" rows="6" class="mt-2" placeholder="Pega aquí el texto completo (opcional si subes archivo)">${esc(b ? b.txt : '')}</textarea>
+  <div class="mt-2 text-sm">Archivo PDF / PNG / JPG (opcional, máx. 10 MB): <input type="file" id="nf" accept=".pdf,.png,.jpg,.jpeg" class="!w-auto">${b && b.archivo ? `<span class="text-xs"> Actual: ${esc(b.archivo.nombre)} (si subes otro, lo reemplaza)</span>` : ''}</div>
+  ${[0, 1, 2].map(i => { const o = ord(q[i] || {}); return `<div class="grid grid-cols-5 gap-1 mt-1 text-xs"><input id="qp${i}" class="col-span-2" placeholder="Pregunta ${i + 1}" value="${esc(q[i].p || '')}"><input id="qc${i}" placeholder="Correcta ✔" value="${esc(o[0] || '')}"><input id="qa${i}" placeholder="Incorrecta 1" value="${esc(o[1] || '')}"><input id="qb${i}" placeholder="Incorrecta 2" value="${esc(o[2] || '')}"></div>`; }).join('')}
+  <div class="flex flex-wrap gap-2 mt-2"><button id="gb" class="btn" onclick="addLibro()">💾 Guardar${URL_SHEETS ? ' en Drive' : ''}</button>
+  ${b ? '<button class="btn !bg-gray-500" onclick="EDIT=null;aBib()">Cancelar edición</button>' : ''}
+  ${URL_SHEETS ? '<button class="btn !bg-amber-600" onclick="subirTodo()">☁ Subir biblioteca actual a Drive</button>' : ''}</div>
+  <h2 class="font-bold mt-4 mb-1">Lecturas (${L.length})</h2>${L.map((x, i) => `<div class="text-sm flex justify-between border-b py-1"><span>${esc(x.t)} ${x.archivo ? '📎' : ''}</span><span>${esc(x.g)} <button class="underline ml-2" onclick="EDIT='${x.id}';aBib();scrollTo(0,0)">Editar</button> <button class="text-red-600 underline ml-2" onclick="delLibro(${i})">Eliminar</button></span></div>`).join('')}`;
+}
+async function addLibro() {
+  const t = $('#nt').value.trim(), x = $('#nx').value.trim(), f = $('#nf').files[0], old = EDIT ? L.find(y => y.id === EDIT) : null;
+  if (!t || (!x && !f && !(old && old.archivo))) return alert('Título y (texto o archivo) son obligatorios.');
+  const q = [0, 1, 2].map(i => ({p: $('#qp' + i).value.trim(), o: [$('#qc' + i).value.trim(), $('#qa' + i).value.trim() || 'Otra', $('#qb' + i).value.trim() || 'Ninguna'], c: 0}));
+  if (q.some(z => !z.p || !z.o[0])) return alert('Completa las 3 preguntas y su respuesta correcta.');
+  const lib = {id: EDIT || 'b' + Date.now(), t, g: $('#ng').value, m: 40, c: old ? old.c : '#0A2A5E', txt: x, q, archivo: old ? old.archivo : undefined};
+  $('#gb').disabled = true;
+  try {
+    if (f) { if (!URL_SHEETS) throw 'Para subir archivos configura URL_SHEETS.'; lib.nuevoArchivo = await leerArchivo(f); }
+    if (URL_SHEETS) { const j = await post({accion: 'admin', op: 'guardar', clave: ADMKEY, libro: lib}); if (!j.ok) throw j.error; await cargarNube(true); }
+    else { const i = L.findIndex(y => y.id === lib.id); if (i >= 0) L[i] = lib; else L.push(lib); save(); }
+  } catch (e) { $('#gb').disabled = false; return alert('No se pudo guardar: ' + e); }
+  EDIT = null; aBib();
+}
+async function delLibro(i) {
+  if (!confirm('¿Eliminar esta lectura?')) return; const id = L[i].id;
+  if (URL_SHEETS) { try { const j = await post({accion: 'admin', op: 'borrar', clave: ADMKEY, id}); if (!j.ok) throw j.error; await cargarNube(true); } catch (e) { return alert('Error: ' + e); } }
+  else { L.splice(i, 1); save(); }
+  aBib();
+}
+async function subirTodo() {
+  if (!confirm('¿Copiar a Drive las lecturas que aún no estén allí?')) return;
+  try { const j = await post({accion: 'admin', op: 'subirTodo', clave: ADMKEY, libros: L.map(({archivo, ...r}) => r)}); if (!j.ok) throw j.error; await cargarNube(true); alert('Listo.'); aBib(); }
+  catch (e) { alert('Error: ' + e); }
+}
+function aRep() {
+  $('#ab').innerHTML = `<div class="flex flex-wrap gap-3 items-center"><button class="btn" onclick="exportar()">📊 Exportar Excel</button>
+  <label class="btn cursor-pointer">Importar CSV SIAGIE<input type="file" accept=".csv" class="hidden" onchange="importar(this)"></label></div>
+  <p class="text-xs mt-2">CSV: DNI, Apellidos y Nombres, Grado, Sección (una fila por estudiante).</p>`;
+}
+function exportar() {
+  if (typeof XLSX === 'undefined') return alert('SheetJS no cargó (¿sin internet?).');
+  const rows = S.map((r, i) => { const b = L.find(x => x.id === r.libro); return {'N°': i + 1, 'DNI': r.dni, 'Apellidos y Nombres': r.n, 'Grado': r.g, 'Sección': r.s, 'Libro Leído': b ? b.t : '', 'Tiempo Efectivo (min)': Math.floor(el(r) / 60), 'Fecha': r.fecha, 'Resumen Evidencia': r.res, 'Emoción': r.emo}; });
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Lectura'); XLSX.writeFile(wb, 'LEE60_IE121_' + hoy() + '.xlsx');
+}
+function importar(inp) {
+  const f = inp.files[0]; if (!f) return; const fr = new FileReader();
+  fr.onload = () => { let n = 0; fr.result.split(/\r?\n/).forEach(l => { const c = l.split(/[,;]/).map(x => x.trim().replace(/^"|"$/g, ''));
+    if (/^\d{6,8}$/.test(c[0]) && c[1] && !S.some(r => r.dni === c[0])) { S.push(nuevo(c[0], c[1], c[2] || GRADOS[0], c[3] || 'A')); n++; } });
+    save(); alert(n + ' estudiantes importados.'); };
+  fr.readAsText(f);
+}
+function aSis() {
+  $('#ab').innerHTML = `<div class="flex flex-wrap gap-3"><button class="btn" onclick="backup()">💾 Backup JSON</button>
+  <label class="btn cursor-pointer">Restaurar Backup<input type="file" accept=".json" class="hidden" onchange="restaurar(this)"></label>
+  <button class="btn !bg-amber-600" onclick="nuevaSesion()">🔄 Iniciar Nueva Sesión AIP del Día</button>
+  <button class="btn !bg-red-600" onclick="borrarTodo()">🗑 Borrar Todo</button></div>`;
+}
+function backup() {
+  const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith(P)) o[k] = localStorage.getItem(k); }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(o)], {type: 'application/json'})); a.download = 'LEE60_backup_' + hoy() + '.json'; a.click();
+}
+function restaurar(inp) {
+  const f = inp.files[0]; if (!f) return; const fr = new FileReader();
+  fr.onload = () => { try { const o = JSON.parse(fr.result); Object.keys(o).forEach(k => k.startsWith(P) && localStorage.setItem(k, o[k]));
+    S = ld('est', S); L = ld('libros', L); alert('Backup restaurado.'); aSis(); } catch (e) { alert('Archivo inválido.'); } };
+  fr.readAsText(f);
+}
+function nuevaSesion() { if (!confirm('¿Limpiar timers y evidencias de hoy?')) return; S.forEach(r => Object.assign(r, {t0: null, seg: 0, est: 'Sin iniciar', antes: {}})); pausa = null; save(); alert('Nueva sesión lista.'); }
+function borrarTodo() { if (!confirm('Se borrará TODO. ¿Continuar?')) return; Object.keys(localStorage).filter(k => k.startsWith(P)).forEach(k => localStorage.removeItem(k)); S = DEMO.map(d => ({...d})); L = LIBROS0; save(); alert('Datos reiniciados (demo).'); aSis(); }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); // modo offline
+vaciar(); cargarNube(); vistaLogin();
+</script>
+</body></html>
