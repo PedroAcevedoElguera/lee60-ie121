@@ -1,4 +1,4 @@
-# LEE 60 · IE 121 Virgen de Fátima (Rímac)
+# LEE 60 · IE 121 Virgen de Fátima
 
 Plan de 1 hora diaria de lectura (MINEDU). App web estática (HTML + localStorage) que registra sesiones,
 lecturas y respuestas en Google Sheets y lee la biblioteca (texto, PDF, imágenes) desde Google Drive.
